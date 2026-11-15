@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Governance Dashboard (prototype)</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f4f4f2; --surface-1: #fcfcfb; --grid: #e6e5e1; --track: #e3e2de;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --series-1: #2a78d6; --series-2: #eb6834;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #111110; --surface-1: #1a1a19; --grid: #2e2e2c; --track: #333330;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #96958c;
+      --series-1: #3987e5; --series-2: #d95926;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text-primary);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 72px; }
+
+  /* Header and filters */
+  h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+  .sub { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 16px; }
+  label.f { display: flex; flex-direction: column; font-size: 11px; color: var(--text-muted); gap: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  select, .seg button { font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-1);
+         border: 1px solid var(--grid); border-radius: 6px; padding: 6px 10px; }
+  .seg { display: inline-flex; }
+  .seg button { border-radius: 0; cursor: pointer; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; } .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+  .seg button.on { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+  .metaline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; margin-top: 18px; font-size: 13px; color: var(--text-secondary); }
+  .metaline a { color: var(--series-1); cursor: pointer; text-decoration: none; } .metaline a:hover { text-decoration: underline; }
+  .dqbar { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .dq { font-size: 11px; border: 1px solid var(--grid); border-radius: 10px; padding: 0 7px; color: var(--text-secondary); white-space: nowrap; background: var(--surface-1); cursor: help; }
+  .dq.q-u { border-style: dashed; }
+  .i { color: var(--text-muted); cursor: help; font-weight: 400; }
+
+  /* Hierarchy: primary = bordered cards (KPIs, charts 1-2); secondary = open sections */
+  .card { background: var(--surface-1); border: 1px solid var(--grid); border-radius: 12px; padding: 22px 24px 18px; margin-top: 28px; }
+  .card h2, .sect h2 { font-size: 16px; margin: 0; font-weight: 600; }
+  .sect { margin-top: 56px; }
+  .sect h2 { font-size: 15px; }
+  .hint { font-size: 13px; color: var(--text-muted); margin: 2px 0 16px; }
+
+  /* KPI groups */
+  .kgroups { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-top: 20px; }
+  .kg { background: var(--surface-1); border: 1px solid var(--grid); border-top: 3px solid var(--gc); border-radius: 12px; padding: 16px 22px 20px; }
+  .kg h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 14px; font-weight: 600; }
+  .kcols { display: grid; grid-template-columns: repeat(var(--n), 1fr); }
+  .kcols > div { padding: 0 20px; border-left: 1px solid var(--grid); } .kcols > div:first-child { padding-left: 0; border-left: 0; }
+  .k .l { font-size: 12px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: flex-start; align-content: flex-start; min-height: 36px; }
+  .k .v { font-size: 34px; font-weight: 650; line-height: 1.1; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .k .v small { font-size: 15px; font-weight: 400; color: var(--text-muted); }
+  .k .d { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+  /* Assigned vs. detected */
+  .avu { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 40px; align-items: start; }
+  .quad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: stretch; }
+  .qh { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); align-self: end; }
+  .qh.r { align-self: center; }
+  .qt { background: var(--surface-1); border-left: 4px solid var(--c); border-radius: 8px; padding: 10px 12px; cursor: help; }
+  .qt .n { font-size: 26px; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .qt .t { font-size: 12px; font-weight: 600; margin-top: 2px; } .qt .d { font-size: 12px; color: var(--text-muted); }
+  .qcap { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 6px; }
+  .avu2 { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; }
+  .mix { display: flex; height: 10px; border-radius: 3px; overflow: hidden; gap: 2px; min-width: 120px; }
+  .mix span { display: block; height: 100%; }
+
+  /* Actions */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  .cols h3 { font-size: 13px; margin: 0 0 4px; }
+  .cols ul { margin: 0; padding: 0; list-style: none; }
+  .cols li { padding: 12px 0; border-top: 1px solid var(--grid); }
+  .cols .what { font-weight: 600; font-size: 13.5px; }
+  .cols .why { color: var(--text-muted); font-size: 12.5px; margin-top: 1px; }
+  .cols .act { color: var(--text-primary); font-size: 13px; margin-top: 3px; }
+  .none { color: var(--text-muted); font-size: 13px; padding: 10px 0; border-top: 1px solid var(--grid); }
+  details { font-size: 13px; color: var(--text-secondary); } summary { cursor: pointer; color: var(--text-muted); font-size: 12.5px; padding: 6px 0; }
+  details p { margin: 6px 0 0; font-size: 12.5px; }
+
+  /* Charts */
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  svg text { fill: var(--text-secondary); font-size: 12px; font-family: inherit; }
+  svg text.strong { fill: var(--text-primary); } svg text.muted { fill: var(--text-muted); }
+  .row-click { cursor: pointer; } .row-click:hover .rowbg { fill: var(--page); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
+  .legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+
+  /* Tables */
+  .tw { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--text-muted); padding: 8px 10px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; } td.n, th.n { text-align: right; }
+  th.grp { text-align: center; border-bottom: 0; padding-bottom: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface-1); }
+  .inv td:first-child, .inv th:first-child { padding-left: 0; }
+  .tag { font-size: 11px; border: 1px solid var(--grid); border-radius: 10px; padding: 1px 8px; color: var(--text-secondary); white-space: nowrap; }
+  .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+  .st { white-space: nowrap; font-weight: 500; }
+  .muted { color: var(--text-muted); font-size: 12px; }
+  .invhead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 8px; }
+  #tip { position: fixed; pointer-events: none; background: var(--text-primary); color: var(--surface-1); font-size: 12px;
+         padding: 6px 9px; border-radius: 6px; opacity: 0; transition: opacity .08s; z-index: 10; max-width: 280px; }
+  .calc { margin-top: 48px; }
+  @media (max-width: 900px) { .kgroups, .avu, .avu2, .cols { grid-template-columns: 1fr; } .cols { gap: 24px; } .kcols { grid-template-columns: 1fr; gap: 16px; }
+    .kcols > div { padding: 0; border-left: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI Governance Dashboard</h1>
+    <div class="sub">Which AI tools are in use, by whom, and at what cost. Demo data, Sep 1 – Nov 14, 2026.</div>
+    <div class="filters">
+      <span class="filters" id="orgsel" style="margin:0"></span>
+      <label class="f">Scope
+        <span class="seg" id="scope"><button data-m="AT" class="on">Person + team</button><button data-m="AU">Individual</button></span>
+      </label>
+      <label class="f">Period <select id="period"></select></label>
+    </div>
+  </header>
+  <div class="metaline"><div id="crumbs"></div><div class="dqbar" id="dqbar"></div></div>
+
+  <div class="kgroups" id="kpis"></div>
+
+  <div class="sect" id="avu"></div>
+
+  <div class="card">
+    <h2>Team × tool adoption</h2>
+    <div class="hint">Share of each team with approved use or detected access. Click a team to drill down.</div>
+    <div id="c2"></div>
+    <div class="legend" id="c2legend"></div>
+  </div>
+
+  <div class="card">
+    <h2>Adoption trend</h2>
+    <div class="hint">Employees with approved-tool use vs. detected access to unapproved tools, last 7 days.</div>
+    <div id="c1"></div>
+    <div class="legend" id="c1legend"></div>
+  </div>
+
+  <div class="sect">
+    <h2>Approved allocation vs. use <span class="i" title="Each bar compares use with the approved allocation for the period (the monthly amount pro-rated by days). Seats are counted as active seats ÷ assigned seats; everything else as amount used ÷ amount allocated. Seats cost the same whether used or not, so Over limit only applies to the amount-based tools.">ⓘ</span></h2>
+    <div class="hint" id="c3hint"></div>
+    <div id="c3"></div>
+    <div class="legend" id="c3legend"></div>
+  </div>
+
+  <div class="sect" id="actions"></div>
+
+  <div class="sect">
+    <div class="invhead">
+      <div>
+        <h2>AI tool inventory</h2>
+        <div class="hint" style="margin-bottom:8px">Every tool detected in this scope. ≈ marks estimated spend.</div>
+      </div>
+      <label class="f">Billing model <select id="billing"></select></label>
+    </div>
+    <div class="tw" id="table"></div>
+  </div>
+
+  <details class="calc"><summary>How the numbers are calculated</summary>
+    <p><b>Scope:</b> Individual shows one person's own use; Person + team includes everyone under them. Fake demo data throughout.</p>
+    <p><b>In use / Low detected use:</b> an assigned tool counts as in use at 15% or more of the person's allocation for the period (pro-rated by days). Below 15% is Low detected use. It is not the same as waste: it may be a reserved seat, occasional use or a short observation window. Reserved seats are listed separately and excluded from the in-use percentage and from seat utilization; for credits and pay-as-you-go, the dollar allocation still includes them because the credits stay committed.</p>
+    <p><b>Detected access:</b> unapproved tools are seen in SSO sign-ins or card expenses. A sign-in shows who accessed a tool, not that they actively used it for work. A card charge shows who paid, not everyone who uses the tool, so employee attribution for card-detected tools is estimated. People counts for unapproved tools mean detected, not confirmed use.</p>
+    <p><b>Shadow AI Spend:</b> an estimate, not verified spend. For each employee detected on an unapproved tool, the prototype takes a daily cost from the tool's assumed list price (monthly price ÷ 30), scales it for weekdays vs. weekends and day-to-day variation, and counts only days with detected activity. It approximates potential subscription exposure. It is not taken from card charges or invoices, and it does not measure tokens or credits.</p>
+    <p><b>Allocation and status:</b> allocation for a period is the monthly allocation pro-rated by days; the 3-month period counts Sep and Oct in full plus November pro-rated for the days elapsed. Under 40% = Underused (Below budget for pay-as-you-go, which is billed by use), 40–100% = On track, over 100% = Over limit. In a partial month the percentage compares use with the allocation to date, while "left" is measured against the full month; a shared credit pool's "left" is pool-wide. License cost is accrued by days elapsed. Demo assumption: 1 credit = $1 (credit amounts are shown in dollars); actual conversion varies by vendor. "Approved tools outside 40–100%" counts tools across everyone in scope; the team line counts each direct report's team and tool, which is what Recommended actions lists.</p>
+    <p><b>Totals:</b> period totals add each month's figure rounded to $1, so they always match the inventory's monthly cells.</p>
+    <p><b>Data quality:</b> ✓ Verified = directly from a vendor usage API, invoice or billing record. ≈ Estimated = calculated, inferred or attributed by estimate (all unapproved spend, card-based attribution, and Midjourney, which has no usage API). ? Unknown = not available (billing plan of unapproved tools). Detected access = seen in sign-in logs only.</p>
+  </details>
+</div>
+<div id="tip"></div>
+
+<script>
+// ---------- Calendar: Sep 1 (day 0) to Nov 14 (day 74), 2026 ----------
+const NDAYS = 75;
+const MONTHS = [
+  { name: 'Sep', start: 0,  len: 30, elapsed: 30 },
+  { name: 'Oct', start: 30, len: 31, elapsed: 31 },
+  { name: 'Nov', start: 61, len: 30, elapsed: 14 },
+];
+const PERIODS = {
+  nov: { label: 'Nov 2026 (so far)', from: 61, to: 75 },
+  oct: { label: 'Oct 2026',          from: 30, to: 61 },
+  sep: { label: 'Sep 2026',          from: 0,  to: 30 },
+  all: { label: 'Sep – Nov (3 months)', from: 0, to: 75 },
+};
+const dayDate = d => new Date(2026, 8, 1 + d);
+const dayLabel = d => dayDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const isWeekend = d => [0, 6].includes((2 + d) % 7); // Sep 1 2026 is a Tuesday
+
+// ---------- Tools ----------
+// alloc: License = seat price per month; credits = credits per assigned person per month (1 credit = $1 here);
+// pay-as-you-go = monthly budget per assigned person.
+const CREDIT_NOTE = 'Demo assumption: 1 credit = $1; actual conversion varies by vendor.';
+const APPROVED = {
+  ChatGPT:      { billing: 'License',            model: 'license', alloc: 30  },
+  Claude:       { billing: 'Per-person credits', model: 'credits', alloc: 200 },
+  Copilot:      { billing: 'License',            model: 'license', alloc: 19  },
+  Midjourney:   { billing: 'Central pool',       model: 'credits', alloc: 60, api: false }, // no vendor usage API assumed: manual export
+  'OpenAI API': { billing: 'Pay-as-you-go',      model: 'payg',    alloc: 120 },
+};
+// Unapproved tools: nobody assigned them, no allocation. Detected through SSO sign-ins (detected access) or card expenses (cardholder).
+const SHADOW = {
+  Cursor:     { monthly: 40, overlap: 'Copilot', evidence: 'card', risk: 'Source code may be sent to a third-party model', users: { p9: 0, p10: 20, p11: 45, p12: 55, p13: 70, p5: 30 } },
+  Perplexity: { monthly: 20, overlap: 'ChatGPT', evidence: 'access', risk: null, users: { p14: 5, p15: 35, p16: 15, p17: 50, p9: 25, p12: 60, p1: 40, p7: 68 } },
+  Gamma:      { monthly: 16, overlap: null,      evidence: 'access', risk: null, users: { p16: 30, p17: 50, p8: 65 } },
+  Otter:      { monthly: 17, overlap: null,      evidence: 'card', risk: 'Meeting audio and transcripts stored by a third party', users: { p4: 10, p8: 25, p18: 55, p6: 60 } },
+};
+// What each source establishes. q = confidence in the usage figures; 'access' is detection only (no confirmed usage).
+const EVIDENCE = {
+  api:    { label: 'Vendor admin API',                tip: 'Usage reported directly by the vendor.', q: 'v' },
+  manual: { label: 'Manual usage export',             tip: 'No vendor usage API is assumed for this tool; figures come from a manual export and are estimates.', q: 'e' },
+  access: { label: 'SSO sign-ins (detected access)',  tip: 'An SSO sign-in shows who accessed the tool, not that they actively used it for work. Usage and spend are not confirmed.', q: 'e' },
+  card:   { label: 'Card expenses (cardholder)',      tip: 'A card charge shows who paid, not everyone who uses the tool or how much. Employee attribution is estimated.', q: 'e' },
+};
+const TOOL_INFO = {
+  ...Object.fromEntries(Object.entries(APPROVED).map(([t, o]) => { const ev = o.api === false ? 'manual' : 'api'; return [t, { approved: true, billing: o.billing, model: o.model, evidence: ev, how: EVIDENCE[ev].label, ident: EVIDENCE[ev].q }]; })),
+  ...Object.fromEntries(Object.entries(SHADOW).map(([t, o]) => [t, { approved: false, billing: 'Unknown', model: 'unknown', evidence: o.evidence, how: EVIDENCE[o.evidence].label, ident: EVIDENCE[o.evidence].q, overlap: o.overlap, risk: o.risk }])),
+};
+const ALL_TOOLS = [...Object.keys(APPROVED), ...Object.keys(SHADOW)];
+const DEPT_TOOLS = { // approved tool -> typical usage as a share of allocation
+  Exec:   { ChatGPT: .5,  Claude: .3 },
+  Eng:    { ChatGPT: .55, Claude: 1.25, Copilot: .95, 'OpenAI API': .8 },
+  Design: { ChatGPT: .7,  Midjourney: .15, Claude: .5 },
+  Sales:  { ChatGPT: .3,  Claude: .12 },
+};
+const MONTH_FACTOR = [.9, 1, 1.05];
+// Seats kept on purpose (executive / on-demand). Not counted as underused when inactive.
+const RESERVED = new Set(['p1|Claude', 'p4|Claude', 'p3|Midjourney']);
+const MIN_ACTIVE = 0.15; // an assigned tool counts as "used" at >= 15% of the person's pro-rated allocation
+
+// ---------- People ----------
+const PEOPLE = [
+  ['p1','Priya Shah','CEO','Exec',null],
+  ['p2','Marcus Lee','VP Engineering','Eng','p1'],
+  ['p3','Sofia Rossi','VP Design','Design','p1'],
+  ['p4','Dan Ortiz','VP Sales','Sales','p1'],
+  ['p5','Anna Kim','Eng Manager, Platform','Eng','p2'],
+  ['p6','Raj Patel','Eng Manager, Product','Eng','p2'],
+  ['p7','Tom Becker','Design Lead','Design','p3'],
+  ['p8','Lena Fischer','Sales Manager','Sales','p4'],
+  ['p9','Wei Chen','Engineer','Eng','p5'],
+  ['p10','Omar Haddad','Engineer','Eng','p5'],
+  ['p11','Zoe Adams','Engineer','Eng','p5'],
+  ['p12','Nina Okafor','Engineer','Eng','p6'],
+  ['p13','Jake Moore','Engineer','Eng','p6'],
+  ['p14','Chloe Martin','Designer','Design','p7'],
+  ['p15','Ravi Nair','Designer','Design','p7'],
+  ['p16','Ben Carter','Account Exec','Sales','p8'],
+  ['p17','Maya Singh','Account Exec','Sales','p8'],
+  ['p18','Leo Dubois','Account Exec','Sales','p8'],
+].map(([id, name, title, dept, mgr]) => ({ id, name, title, dept, mgr }));
+const BY_ID = Object.fromEntries(PEOPLE.map(p => [p.id, p]));
+PEOPLE.forEach(p => p.reports = PEOPLE.filter(q => q.mgr === p.id).map(q => q.id));
+
+// ---------- Fake daily usage: person -> tool -> 75 daily dollar values ----------
+function rng(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+const monthOf = d => MONTHS.findIndex(m => d >= m.start && d < m.start + m.len);
+PEOPLE.forEach((p, i) => {
+  p.usage = {};
+  Object.entries(DEPT_TOOLS[p.dept]).forEach(([tool, ratio], j) => {
+    const r = rng((i + 1) * 101 + j * 13), jit = .75 + r() * .5, a = new Float64Array(NDAYS);
+    for (let d = 0; d < NDAYS; d++) {
+      const m = monthOf(d);
+      a[d] = APPROVED[tool].alloc * ratio * jit * MONTH_FACTOR[m] / MONTHS[m].len * (isWeekend(d) ? .2 : 1.2) * (.8 + .4 * r());
+    }
+    p.usage[tool] = a;
+  });
+  Object.entries(SHADOW).forEach(([tool, s], j) => {
+    if (!(p.id in s.users)) return;
+    const r = rng((i + 1) * 211 + j * 17), a = new Float64Array(NDAYS);
+    for (let d = s.users[p.id]; d < NDAYS; d++) {
+      if (r() < .15) continue;
+      a[d] = s.monthly / 30 * (isWeekend(d) ? .2 : 1.2) * (.7 + .6 * r());
+    }
+    p.usage[tool] = a;
+  });
+});
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const money = n => '$' + Math.round(n).toLocaleString();
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const subtree = id => [id, ...BY_ID[id].reports.flatMap(subtree)];
+const sumArr = (a, from, to) => { let s = 0; for (let d = from; d < to; d++) s += a[d]; return s; };
+const spend = (ids, tool, from, to) => ids.reduce((s, id) => s + (BY_ID[id].usage[tool] ? sumArr(BY_ID[id].usage[tool], from, to) : 0), 0);
+const prorate = (from, to) => MONTHS.reduce((t, m) => t + Math.max(0, Math.min(to, m.start + m.len) - Math.max(from, m.start)) / m.len, 0);
+const isAssigned = (id, tool) => !!APPROVED[tool] && DEPT_TOOLS[BY_ID[id].dept][tool] !== undefined;
+const isReserved = (id, tool) => RESERVED.has(id + '|' + tool);
+// "Active": approved tools need meaningful use (>= MIN_ACTIVE of the pro-rated allocation); unapproved tools any detected use.
+function isActive(id, tool, from, to) {
+  const a = BY_ID[id].usage[tool]; if (!a) return false;
+  const s = sumArr(a, from, to);
+  return APPROVED[tool] ? s >= MIN_ACTIVE * APPROVED[tool].alloc * prorate(from, to) : s > 0.005;
+}
+const activeUsers = (ids, tool, from, to) => ids.filter(id => isActive(id, tool, from, to)).length;
+
+// Assigned vs. detected use, per employee and tool
+function classify(id, tool, from, to) {
+  const assigned = isAssigned(id, tool), used = isActive(id, tool, from, to);
+  return assigned ? (used ? 'au' : isReserved(id, tool) ? 'ar' : 'an') : (used ? 'nu' : 'nn');
+}
+function pairCounts(ids, from, to) {
+  const c = { au: 0, an: 0, ar: 0, nu: 0, nn: 0 }, ppl = { au: new Set(), an: new Set(), nu: new Set() };
+  ids.forEach(id => ALL_TOOLS.forEach(t => {
+    const k = classify(id, t, from, to); c[k]++;
+    if (k === 'au') ppl.au.add(id); if (k === 'an' || k === 'ar') ppl.an.add(id); if (k === 'nu') ppl.nu.add(id);
+  }));
+  return { c, ppl };
+}
+
+// Billing-model-aware metrics for an approved tool
+function metrics(ids, tool, from, to) {
+  const A = APPROVED[tool], pr = prorate(from, to);
+  const assigned = ids.filter(id => isAssigned(id, tool));
+  const reservedIdle = assigned.filter(id => isReserved(id, tool) && !isActive(id, tool, from, to));
+  const countable = assigned.filter(id => !reservedIdle.includes(id));
+  const active = countable.filter(id => isActive(id, tool, from, to)).length;
+  const alloc = assigned.length * A.alloc * pr, consumed = spend(ids, tool, from, to);
+  const cost = A.model === 'license' ? alloc : consumed; // licenses cost the same whether used or not
+  let util = null;
+  if (A.model === 'license') util = countable.length ? active / countable.length * 100 : null;
+  else util = alloc ? consumed / alloc * 100 : null;
+  // Month view (single month): the FULL monthly allocation and what is left of it. `alloc` above is pro-rated to date.
+  // A central pool is shared, so its remaining balance is pool-wide while `consumed` covers only the selected scope.
+  const single = state.period !== 'all', pool = A.billing === 'Central pool';
+  const poolPeople = PEOPLE.filter(q => isAssigned(q.id, tool)).map(q => q.id);
+  const monthly = (pool ? poolPeople.length : assigned.length) * A.alloc;
+  const used = pool ? spend(poolPeople, tool, from, to) : consumed;
+  const remaining = A.model !== 'license' && single ? Math.max(0, monthly - used) : null;
+  return { model: A.model, pool, assigned: assigned.length, countable: countable.length, reserved: reservedIdle.length, active, alloc, consumed, cost, util, monthly, remaining, overMonthly: single && A.model !== 'license' && used > monthly };
+}
+const costFor = (ids, tool, from, to) => APPROVED[tool] ? metrics(ids, tool, from, to).cost : spend(ids, tool, from, to);
+// Period total = sum of each month's figure rounded to $1, so any total always equals the inventory's monthly cells.
+const rt = (ids, tool, from, to) => MONTHS.reduce((s, m) => { const a = Math.max(from, m.start), b = Math.min(to, m.start + m.elapsed); return b > a ? s + Math.round(costFor(ids, tool, a, b)) : s; }, 0);
+const hasAnyUse = (id, tool, from, to) => !!BY_ID[id].usage[tool] && sumArr(BY_ID[id].usage[tool], from, to) > 0.005;
+const actionGroups = me => me.reports.length && state.mode === 'AT'
+  ? me.reports.map(r => ({ name: BY_ID[r].name + (BY_ID[r].reports.length ? "'s team" : ''), ids: subtree(r) })) : [{ name: me.name, ids: [me.id] }];
+// Team x tool allocations outside 40-100% (seats cannot exceed 100%). Shared by the KPI and Recommended actions.
+function teamAllocItems(me, from, to) {
+  return actionGroups(me).flatMap(g => Object.keys(APPROVED).map(t => {
+    const m = metrics(g.ids, t, from, to); if (!m.assigned || m.util === null) return null;
+    const st = status(m.util); if (st === 'ok' || (m.model === 'license' && st === 'over')) return null;
+    return { g, t, m, st };
+  })).filter(Boolean);
+}
+
+// Active people in the trailing 7 days ending at `end`, and 2 weeks earlier (period-relative trend)
+function trend(ids, tool, to) {
+  const end = to - 1; if (end - 20 < 0) return null;
+  const now = activeUsers(ids, tool, end - 6, end + 1), before = activeUsers(ids, tool, end - 20, end - 13);
+  return { now, before, delta: now - before };
+}
+
+const status = pct => pct > 100 ? 'over' : pct < 40 ? 'under' : 'ok';
+const ST = {
+  over:  { label: 'Over limit', icon: '▲', color: 'var(--critical)' },
+  ok:    { label: 'On track',   icon: '●', color: 'var(--good)' },
+  under: { label: 'Underused',  icon: '▼', color: 'var(--warning)' },
+};
+const stLabel = (k, model) => k === 'under' && model === 'payg' ? 'Below budget' : ST[k].label; // pay-as-you-go is billed by use, so low use is not "underused"
+const stHtml = (pct, early, model) => { const k = status(pct), s = ST[k]; return `<span class="st"><span style="color:${s.color}">${s.icon}</span> ${stLabel(k, model)}${early && k === 'under' ? '<br><span class="muted">early read</span>' : ''}</span>`; };
+const DQ = {
+  v: ['✓', 'Verified', 'Directly from a vendor usage API, invoice or billing record'],
+  e: ['≈', 'Estimated', 'Calculated, inferred or attributed by estimate (for example card cardholders, manual exports or activity-based cost estimates)'],
+  u: ['?', 'Unknown', 'Not available'],
+};
+const dq = k => `<span class="dq q-${k}" title="${DQ[k][2]}">${DQ[k][0]} ${DQ[k][1]}</span>`;
+// Evidence pill for a tool: SSO-detected tools show "Detected access" (not a confidence level), others show their confidence
+const evPill = t => { const i = TOOL_INFO[t], e = EVIDENCE[i.evidence];
+  return i.evidence === 'access' ? `<span class="dq" title="${e.tip}">Detected access</span>` : `<span class="dq q-${e.q}" title="${e.tip}">${DQ[e.q][0]} ${DQ[e.q][1]}</span>`; };
+
+// ---------- State & controls ----------
+const state = { path: [], mode: 'AT', period: 'nov', billing: 'All' };
+let tips = [];
+const T = html => tips.push(html) - 1;
+const tip = $('#tip');
+function showTip(e, html) {
+  tip.innerHTML = html; tip.style.opacity = 1;
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - 290) + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+}
+const hideTip = () => tip.style.opacity = 0;
+const scopeId = () => state.path[state.path.length - 1] || 'p1';
+
+$('#period').innerHTML = Object.entries(PERIODS).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join('');
+$('#billing').innerHTML = ['All', ...new Set(Object.values(TOOL_INFO).map(t => t.billing))].map(b => `<option>${b}</option>`).join('');
+$('#period').onchange = e => { state.period = e.target.value; render(); };
+$('#billing').onchange = e => { state.billing = e.target.value; render(); };
+document.querySelectorAll('#scope button').forEach(b => b.onclick = () => {
+  state.mode = b.dataset.m;
+  document.querySelectorAll('#scope button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+// Cascading org dropdowns: level 1 lists the CEO's reports; picking one reveals that person's reports, and so on.
+function renderOrgSel() {
+  let html = '', cur = 'p1';
+  for (let lvl = 0; BY_ID[cur].reports.length; lvl++) {
+    const node = BY_ID[cur], sel = state.path[lvl] || '';
+    html += `<label class="f">Reports to ${node.name}<select data-lvl="${lvl}">
+      <option value="">${node.name} (${node.title})</option>
+      ${node.reports.map(r => `<option value="${r}" ${r === sel ? 'selected' : ''}>${BY_ID[r].name} · ${BY_ID[r].title}</option>`).join('')}</select></label>`;
+    if (!sel) break;
+    cur = sel;
+  }
+  $('#orgsel').innerHTML = html;
+  $('#orgsel').querySelectorAll('select').forEach(s => s.onchange = () => {
+    state.path = state.path.slice(0, +s.dataset.lvl); if (s.value) state.path.push(s.value); render();
+  });
+}
+function select(id) {
+  const chain = []; for (let p = BY_ID[id]; p && p.mgr; p = BY_ID[p.mgr]) chain.unshift(p.id);
+  state.path = chain; render();
+}
+window.select = select; window.showTip = showTip; window.hideTip = hideTip;
+
+// Rows shared by the assigned-vs-used table and the heatmap: the person plus each direct report
+const teamRows = me => state.mode === 'AT' && me.reports.length
+  ? [{ id: me.id, label: `${me.name} (individual)`, ids: [me.id] },
+     ...me.reports.map(r => ({ id: r, label: BY_ID[r].name + (BY_ID[r].reports.length ? ' (team)' : ''), ids: subtree(r), drill: BY_ID[r].reports.length > 0 }))]
+  : [{ id: me.id, label: me.name, ids: [me.id] }];
+const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+
+// ---------- Render ----------
+const ppl = n => n === 1 ? '1 person' : `${n} people`;
+const esc = s => s.replace(/"/g, '&quot;');
+const tipAttr = s => `title="${esc(s)}"`;
+
+function render() {
+  tips = [];
+  renderOrgSel();
+  const me = BY_ID[scopeId()], ids = state.mode === 'AU' ? [me.id] : subtree(me.id);
+  const { from, to, label: periodLabel } = PERIODS[state.period];
+  const days = to - from, early = days < 28;
+  const ctx = { me, ids, from, to, days, early, periodLabel };
+
+  const chain = []; for (let p = me; p; p = BY_ID[p.mgr]) chain.unshift(p);
+  $('#crumbs').innerHTML = chain.map((p, i) => i === chain.length - 1 ? `<b>${p.name}</b>` : `<a onclick="select('${p.id}')">${p.name}</a>`).join(' › ')
+    + ` &nbsp;·&nbsp; ${state.mode === 'AT' ? ppl(ids.length) : 'individual'} · ${periodLabel}`;
+  $('#dqbar').innerHTML = `<span>${days} ${days === 1 ? 'day' : 'days'} observed${early ? ' (early read)' : ''}</span> <span>·</span> ${['v', 'e', 'u'].map(dq).join(' ')} <span class="dq" title="Seen in SSO sign-in logs. Shows who accessed a tool, not that they actively used it for work.">Detected access</span>`;
+
+  renderKpis(ctx); renderAvu(ctx); renderC1(ctx); renderC2(ctx); renderC3(ctx); renderActions(ctx); renderTable(ctx);
+}
+
+// Five KPIs in two groups: Shadow AI (3) and Spend and Governance (2)
+function renderKpis({ me, ids, from, to, early, days }) {
+  const apAll = Object.keys(APPROVED).filter(t => metrics(ids, t, from, to).assigned > 0);
+  const shAll = Object.keys(SHADOW);
+  const shDetected = shAll.filter(t => spend(ids, t, from, to) > 0);
+  const shPairs = ids.flatMap(id => shAll.filter(t => isActive(id, t, from, to)));
+  const shPeople = new Set(ids.filter(id => shAll.some(t => isActive(id, t, from, to))));
+  const accessPairs = shPairs.filter(t => TOOL_INFO[t].evidence === 'access').length, cardPairs = shPairs.length - accessPairs;
+  // Totals add the per-tool amounts exactly as the inventory shows them (each month rounded to $1), so they always reconcile.
+  const shSpend = shAll.reduce((s, t) => s + rt(ids, t, from, to), 0);
+  const apCost = apAll.reduce((s, t) => s + rt(ids, t, from, to), 0);
+  const outside = apAll.map(t => metrics(ids, t, from, to).util).filter(u => u !== null).map(status);
+  const under = outside.filter(s => s === 'under').length, over = outside.filter(s => s === 'over').length;
+  const tItems = teamAllocItems(me, from, to), tUnder = tItems.filter(i => i.st === 'under').length, tOver = tItems.filter(i => i.st === 'over').length;
+  const groups = actionGroups(me), sameLevel = groups.length === 1 && groups[0].ids.length === ids.length;
+  const k = (l, v, d, tip = '', pill = '') => `<div class="k"><div class="l" ${tip ? tipAttr(tip) : ''}>${l}${tip ? ' <span class="i">ⓘ</span>' : ''}${pill}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+  const idTip = shPairs.length ? ` Of ${shPairs.length} employee–tool pairs, ${accessPairs} come from SSO sign-ins (detected access: identity known, active use not confirmed) and ${cardPairs} from card expenses (attributed to the cardholder's team by estimate).` : '';
+  const group = (title, color, items) => `<div class="kg" style="--gc:${color};--n:${items.length}"><h3>${title}</h3><div class="kcols">${items.join('')}</div></div>`;
+  $('#kpis').innerHTML =
+    group('Shadow AI', 'var(--series-2)', [
+      k('Unapproved tools detected', shDetected.length, '', 'Tools seen in SSO sign-ins or card expenses that nobody assigned or approved, in the selected period. Detection is not proof of active use.'),
+      k('People using unapproved tools', `${shPeople.size}<small> of ${ids.length}</small>`, `${(shPeople.size / ids.length * 100).toFixed(0)}% of people · detected`,
+        `Distinct employees detected on an unapproved tool in the selected period (sign-in access or card-based attribution). This is detection, not confirmed active work use.${idTip}`, ` ${dq('e')}`),
+      k('Shadow AI Spend', `≈${money(shSpend)}`, '',
+        "Estimated, not verified. The prototype generates this figure: for each employee detected on an unapproved tool it takes a daily cost from the tool's assumed list price (monthly price ÷ 30), scaled for weekdays vs. weekends and day-to-day variation, on days with detected activity only. It approximates potential subscription exposure, not actual expenditure. It is not taken from card charges or invoices (verified transactions) and does not measure tokens or credits.", ` ${dq('e')}`),
+    ]) +
+    group('Spend and Governance', 'var(--text-muted)', [
+      k('Approved share of AI spend', (apCost + shSpend ? apCost / (apCost + shSpend) * 100 : 0).toFixed(0) + '%', `of ${money(apCost + shSpend)} tracked`,
+        "Tracked spend = approved spend + Shadow AI Spend. Approved spend is verified from vendor data (license cost accrued to date + credits consumed + pay-as-you-go spend; demo assumption: 1 credit = $1, actual conversion varies by vendor), except Midjourney, which is estimated from a manual export. Shadow AI Spend is an estimate. Only spend we can detect is counted, so this may understate Shadow AI's real financial contribution."),
+      k('Approved tools outside 40–100%', under + over,
+        sameLevel ? `${under} under 40% · ${over} over limit` : `By tool: ${under} under · ${over} over<br>By team: ${tUnder} under · ${tOver} over`,
+        `The headline counts approved tools across everyone in scope together, below 40% (Underused, or Below budget for pay-as-you-go) or above 100% (Over limit) of their allocation. "By team" applies the same test to each direct report's team and tool, which is what Recommended actions lists, so the two can differ.${early ? ` Early read: ${days} days observed.` : ''}`),
+    ]);
+}
+
+// Central concept: assigned vs. detected use
+function renderAvu({ me, ids, from, to, early, days }) {
+  const { c, ppl: pp } = pairCounts(ids, from, to);
+  // Reserved seats are shown separately and excluded from the in-use percentage (as they are from seat utilization)
+  const assigned = c.au + c.an, pct = assigned ? c.au / assigned * 100 : 0;
+  const shTools = Object.keys(SHADOW).filter(t => activeUsers(ids, t, from, to) > 0).length;
+  const R = 52, C = 2 * Math.PI * R, sw = 18;
+  const lowTip = 'Low detected use means under 15% of the person\'s allocation for the period. It is not the same as waste: it may be occasional use, or a short observation window.';
+  const ti1 = T(`<b>Assigned tools in use</b><br>${c.au} of ${assigned} assignments in use (15% or more of the person's allocation)<br>${c.an} Low detected use (under 15%; not the same as waste)${c.ar ? `<br>${c.ar} reserved seat${c.ar === 1 ? '' : 's'} kept on purpose, excluded from the percentage` : ''}${early ? `<br>Only ${days} of 30 days observed.` : ''}`);
+  const donut = `<svg viewBox="0 0 140 140" width="150" height="150" role="img" aria-label="Share of assigned tools in use" onmousemove="showTip(event,tips[${ti1}])" onmouseleave="hideTip()" style="flex:none;width:150px;height:150px">
+      <circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--track)" stroke-width="${sw}"/>
+      <circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--series-1)" stroke-width="${sw}" stroke-dasharray="${pct / 100 * C} ${C}" transform="rotate(-90 70 70)"/>
+      <text x="70" y="76" text-anchor="middle" class="strong" style="font-size:26px;font-weight:650">${assigned ? pct.toFixed(0) + '%' : '–'}</text></svg>`;
+  const left = `<div style="display:flex;gap:20px;align-items:center">${donut}
+    <div><div style="font-weight:600">Assigned tools in use</div>
+      <div class="muted" style="margin:2px 0 8px">${c.au} of ${plural(assigned, 'assignment')}</div>
+      <div><span class="sw" style="background:var(--series-1)"></span>${c.au} in use</div>
+      <div title="${lowTip}"><span class="sw" style="background:var(--track)"></span>${c.an} Low detected use</div>
+      ${c.ar ? `<div class="muted" title="Seats kept on purpose (executive or on-demand). Excluded from the in-use percentage."><span class="sw" style="background:none;border:1px dashed var(--text-muted)"></span>${c.ar} reserved (excluded)</div>` : ''}</div></div>`;
+  const right = `<div title="Employees detected on a tool nobody assigned or approved: sign-in access, or card-based attribution (estimated). This is detection, not confirmed active use.">
+    <div style="font-size:34px;font-weight:650;line-height:1.1;color:var(--series-2)">${pp.nu.size} <small style="font-size:15px;font-weight:400;color:var(--text-muted)">of ${ids.length}</small></div>
+    <div style="font-weight:600;margin-top:4px">${plural(pp.nu.size, 'employee')} detected on ${shTools === 1 ? 'a tool' : `${shTools} tools`} nobody assigned</div>
+    <div class="muted" style="margin-top:4px">That is ${plural(c.nu, 'employee–tool pair')}: one employee can use several unassigned tools. Potential Shadow AI ${dq('e')}</div></div>`;
+
+  let table = '';
+  if (ids.length === 1) { // employee level: one row per tool
+    const id = ids[0], rows = ALL_TOOLS.map(t => ({ t, k: classify(id, t, from, to) })).filter(r => r.k !== 'nn');
+    const result = (t, k) => ({ au: 'In use', an: hasAnyUse(id, t, from, to) ? 'Low detected use' : 'No detected use', ar: 'Reserved seat (excluded)', nu: 'Detected, not assigned (potential Shadow AI)' })[k];
+    const detected = k => ({ au: 'Yes', an: 'Low', ar: 'Low', nu: 'Detected' })[k];
+    table = `<div class="tw" style="margin-top:20px"><table><thead><tr><th>Tool</th><th>Assigned</th><th title="${lowTip}">Detected use</th><th>Result</th><th>Evidence</th></tr></thead><tbody>` +
+      (rows.map(({ t, k }) => `<tr><td><span class="sw" style="background:var(${APPROVED[t] ? '--series-1' : '--series-2'})"></span><b>${t}</b></td>
+        <td>${k === 'nu' ? 'No' : 'Yes'}</td><td>${detected(k)}</td><td>${result(t, k)}</td><td>${evPill(t)}</td></tr>`).join('')
+        || '<tr><td colspan="5" class="muted">No assigned tools and no detected activity.</td></tr>') + '</tbody></table></div>';
+  }
+  // Team view: the donut and the Shadow AI number on the left, the team / person table on the right
+  const teamTable = `<table><thead><tr><th></th><th></th><th class="grp" colspan="3">Employee–tool pairs</th></tr>
+      <tr><th>Team / person</th><th></th><th class="n" title="Assigned and in use (15% or more of allocation)">Utilized</th><th class="n" title="${lowTip}">Low use</th><th class="n" title="Not assigned, but detected (potential Shadow AI)">Shadow</th></tr></thead><tbody>` +
+    teamRows(me).map(r => {
+      const { c: rc } = pairCounts(r.ids, from, to), tot = rc.au + rc.an + rc.nu || 1;
+      const seg = (n, col) => n ? `<span style="width:${n / tot * 100}%;background:${col}"></span>` : '';
+      const ti = T(`<b>${r.label}</b><br>Employee–tool pairs<br>Assigned and in use: ${rc.au}<br>Low detected use: ${rc.an}${rc.ar ? `<br>Reserved seats (excluded): ${rc.ar}` : ''}<br>Detected, not assigned (potential Shadow AI): ${rc.nu}`);
+      return `<tr class="${r.drill ? 'click' : ''}" ${r.drill ? `onclick="select('${r.id}')"` : ''} onmousemove="showTip(event,tips[${ti}])" onmouseleave="hideTip()">
+        <td>${trunc(r.label, 28)}${r.drill ? ' ›' : ''}</td>
+        <td><div class="mix">${seg(rc.au, 'var(--series-1)')}${seg(rc.an, 'var(--text-muted)')}${seg(rc.nu, 'var(--series-2)')}</div></td>
+        <td class="n">${rc.au}</td><td class="n">${rc.an}</td><td class="n">${rc.nu}</td></tr>`;
+    }).join('') + '</tbody></table>';
+  $('#avu').innerHTML = `<h2>Assigned vs. detected use</h2>
+    <div class="hint" style="margin-bottom:4px">How much of what people were given is in use, and who is using tools nobody gave them.</div>
+    <div class="hint"><b>In use</b> means at least 15% of the person's allocation for the period; below that is <b>Low detected use</b>, which is not the same as waste. An assignment is one person given one tool, so a person given two tools counts as two. Employee counts and employee–tool pair counts differ.</div>
+    ${ids.length === 1 ? `<div class="avu2">${left}${right}</div>${table}`
+      : `<div class="avu"><div style="display:flex;flex-direction:column;gap:32px">${left}${right}</div><div class="tw">${teamTable}</div></div>`}`;
+}
+
+// Short, policy-aware next step for an unapproved tool (why it matters + suggested action)
+function shadowAdvice(t, users, share, actIds) {
+  const info = TOOL_INFO[t];
+  if (info.overlap) {
+    const missing = (actIds || []).filter(id => !isAssigned(id, info.overlap)).length;
+    return { short: `Migrate to ${info.overlap}`,
+      why: `Unapproved, and approved ${info.overlap} already covers it.${info.risk ? ` Security concern: ${info.risk.toLowerCase()}.` : ''}`,
+      action: `Migrate ${ppl(users)} to ${info.overlap}${missing ? ` (${missing} would need a seat)` : ''}.` };
+  }
+  if (info.risk) return { short: 'Security review', why: `Security concern: ${info.risk.toLowerCase()}.`, action: 'Security review; block only if it fails policy.' };
+  if (share >= 30) return { short: 'Evaluate approval', why: `${share.toFixed(0)}% of people were detected using it and no approved tool covers it.`, action: 'Confirm the business need, then evaluate approval.' };
+  return { short: 'Monitor', why: 'Few users; security risk not yet assessed.', action: 'Monitor.' };
+}
+
+// Rule-based actions. Shadow AI and Spend and Limits stay separate; top 3 of each shown first.
+function renderActions({ me, ids, from, to, early, days }) {
+  const item = (icon, what, why, act, tip = '') => `<li ${tip ? tipAttr(tip) : ''}><div class="what">${icon} ${what}</div><div class="why">${why}</div><div class="act">→ ${act}</div></li>`;
+
+  const shadow = Object.keys(SHADOW).map(t => {
+    const act = ids.filter(id => isActive(id, t, from, to)), sp = spend(ids, t, from, to);
+    return { t, act, users: act.length, sp, share: act.length / ids.length * 100, tr: trend(ids, t, to) };
+  }).filter(i => i.users > 0).sort((a, b) => b.users - a.users || b.sp - a.sp).map(i => {
+    const adv = shadowAdvice(i.t, i.users, i.share, i.act);
+    return item('<span class="sw" style="background:var(--series-2)"></span>', `${i.t}: ${ppl(i.users)} detected, ≈${money(rt(ids, i.t, from, to))}`,
+      `${adv.why}${i.tr ? ` ${i.tr.delta >= 0 ? '+' : ''}${i.tr.delta} detected vs. 2 weeks ago.` : ''}`, adv.action,
+      `Spend is an estimate of potential subscription exposure, not invoices. Evidence: ${EVIDENCE[TOOL_INFO[i.t].evidence].tip}`);
+  });
+
+  const partial = state.period === 'nov';
+  const spend_ = teamAllocItems(me, from, to).map(({ g, t, m, st }) => {
+    const A = APPROVED[t], pct = m.util.toFixed(0);
+    let gap, head, act;
+    const icon = st === 'over' ? '<span style="color:var(--critical)">▲</span>' : '<span style="color:var(--warning)">▼</span>';
+    const used = rt(g.ids, t, from, to), alloc = Math.round(m.alloc); // differences use the rounded figures shown
+    const basis = m.remaining !== null && partial ? ' to date' : '';
+    const left = m.remaining !== null ? `${money(m.remaining)} left of ${money(m.monthly)}${m.pool ? ' pool' : ' this month'}` : '';
+    if (A.model === 'license') {
+      const idle = m.countable - m.active; gap = idle * A.alloc * prorate(from, to);
+      head = `${m.active} of ${plural(m.countable, 'seat')} in use (${pct}%)${m.reserved ? `, ${m.reserved} reserved excluded` : ''}`;
+      act = `Check the ${plural(idle, 'low-use seat')} before reclaiming; they may be occasional users.`;
+    } else if (A.model === 'credits') {
+      head = `${money(used)} used of ${money(alloc)} allocated${basis} (${pct}%)`;
+      if (st === 'over') { gap = used - alloc; act = `Ahead of allocation by ${money(gap)}${left ? `; ${left}` : ''}. Top up credits or cap usage.`; }
+      else { gap = alloc - used; act = t === 'Midjourney' ? 'Shared pool: reallocate unused credits to teams running short.' : 'Lower the allocation at renewal if the pattern holds.'; }
+    } else {
+      head = `${money(used)} spent of ${money(alloc)} budget${basis} (${pct}%)${st === 'under' ? ' · Below budget' : ''}`;
+      gap = alloc - used;
+      act = st === 'over' ? `Over budget${basis} by ${money(-gap)}${left ? `; ${left}` : ''}. Review top consumers, then raise the budget or cap spend.` : 'Billed by usage, so nothing is wasted. Consider lowering the budget at the next review.';
+    }
+    return { gap: Math.abs(gap), html: item(icon, `${g.name} · ${t}`, `${head}${st === 'under' && early ? ` · early read (${days} of 30 days)` : ''}`, act, `Billing model: ${A.billing}.${m.pool ? ' Shared pool: "left" is for the whole pool; "used" covers the selected scope.' : ''}${TOOL_INFO[t].evidence === 'manual' ? ' Usage is estimated from a manual export (no vendor usage API).' : ''}${A.model === 'credits' ? ' ' + CREDIT_NOTE : ''}`) };
+  }).sort((a, b) => b.gap - a.gap).map(i => i.html);
+
+  const col = (title, items, none) => {
+    const top = items.slice(0, 3), rest = items.slice(3);
+    return `<div><h3>${title}</h3><ul>${top.join('') || `<div class="none">${none}</div>`}</ul>
+      ${rest.length ? `<details><summary>View ${rest.length} more</summary><ul>${rest.join('')}</ul></details>` : ''}</div>`;
+  };
+  $('#actions').innerHTML = `<h2>Recommended actions</h2><div class="hint">Highest priority first.</div>
+    <div class="cols">${col('Shadow AI to review', shadow, 'No unapproved tools detected here.')}${col('Spend and limits', spend_, 'All approved tools are within range.')}</div>
+    <details style="margin-top:12px"><summary>How are these decided?</summary>
+      <p><b>Shadow AI:</b> ranked by number of people detected, then estimated spend. If an approved tool overlaps (Cursor→Copilot, Perplexity→ChatGPT), the advice is to migrate users and counts who would need a new seat. Without an overlap, a tool flagged for a security or privacy concern goes to Security review (blocked only if it fails policy). Otherwise, with 30% or more of people using it, we suggest confirming the business need and evaluating approval. Anything smaller is monitored.</p>
+      <p><b>Spend and limits:</b> utilization depends on the billing model: License = active ÷ assigned seats (reserved seats excluded); credits = consumed ÷ allocated; pay-as-you-go = spend ÷ budget. Under 40% = Underused (Below budget for pay-as-you-go), over 100% = Over limit. In a partial month the percentage compares use with the allocation pro-rated to date, while "left" is measured against the full month. Low-use seats are never assumed to be waste. Biggest dollar gaps first.</p></details>`;
+}
+
+// Chart 1: distinct active employees over time, approved vs. unapproved
+function renderC1({ ids, from, to }) {
+  const apTools = Object.keys(APPROVED), shTools = Object.keys(SHADOW), pts = [];
+  for (let d = from; d < to; d++) {
+    const w0 = Math.max(0, d - 6), w = d + 1 - w0;
+    let ap = 0, sh = 0, both = 0;
+    ids.forEach(id => {
+      const a = apTools.some(t => { const u = BY_ID[id].usage[t]; return u && sumArr(u, w0, d + 1) >= MIN_ACTIVE * APPROVED[t].alloc * w / 30; });
+      const s = shTools.some(t => { const u = BY_ID[id].usage[t]; return u && sumArr(u, w0, d + 1) > 0.005; });
+      if (a) ap++; if (s) sh++; if (a && s) both++;
+    });
+    pts.push({ d, ap, sh, both, any: ap + sh - both });
+  }
+  const n = pts.length, W = 1100, H = 320, m = { l: 44, r: 150, t: 14, b: 28 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const ymax = Math.max(1, ids.length), x = i => m.l + (n > 1 ? i / (n - 1) : .5) * pw, y = v => m.t + ph - v / (ymax * 1.05) * ph;
+  const tstep = Math.max(1, Math.ceil(ymax / 4)), ticks = []; for (let v = 0; v <= ymax; v += tstep) ticks.push(v);
+  const xstep = n > 40 ? 14 : n > 20 ? 5 : 2;
+  const line = k => pts.map((p, i) => `${x(i)},${y(p[k])}`).join(' ');
+  const last = pts[n - 1];
+  let ya = y(last.ap), ys = y(last.sh); if (Math.abs(ya - ys) < 14) { if (ya <= ys) ya -= 7, ys += 7; else ya += 7, ys -= 7; }
+  $('#c1').innerHTML = `<svg id="c1svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Distinct active employees using approved versus unapproved tools over time">
+    ${ticks.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text class="muted" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    ${pts.map((p, i) => i % xstep === 0 ? `<text class="muted" x="${x(i)}" y="${H - 8}" text-anchor="middle">${dayLabel(p.d)}</text>` : '').join('')}
+    <polyline points="${line('ap')}" fill="none" stroke="var(--series-1)" stroke-width="2.5"/>
+    <polyline points="${line('sh')}" fill="none" stroke="var(--series-2)" stroke-width="2.5"/>
+    <circle cx="${x(n - 1)}" cy="${y(last.ap)}" r="4" fill="var(--series-1)" stroke="var(--surface-1)" stroke-width="2"/>
+    <circle cx="${x(n - 1)}" cy="${y(last.sh)}" r="4" fill="var(--series-2)" stroke="var(--surface-1)" stroke-width="2"/>
+    <text class="strong" x="${x(n - 1) + 10}" y="${ya + 4}">Approved ${last.ap}</text>
+    <text class="strong" x="${x(n - 1) + 10}" y="${ys + 4}">Unapproved ${last.sh}</text>
+    <line id="cross" y1="${m.t}" y2="${m.t + ph}" stroke="var(--text-muted)" opacity="0"/>
+    <rect id="hit" x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="transparent"/>
+  </svg>`;
+  const svg = $('#c1svg'), cross = $('#cross');
+  $('#hit').onmousemove = e => {
+    const r = svg.getBoundingClientRect(), px = (e.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - m.l) / pw * (n - 1)))), p = pts[i];
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('opacity', 1);
+    showTip(e, `<b>7 days to ${dayLabel(p.d)}</b>${p.d < 6 ? ' (partial window)' : ''}<br>Approved tools (usage): ${p.ap}<br>Unapproved tools (detected): ${p.sh}<br>Both: ${p.both}<br><b>Unique employees (any AI): ${p.any}</b>`);
+  };
+  $('#hit').onmouseleave = () => { cross.setAttribute('opacity', 0); hideTip(); };
+  $('#c1legend').innerHTML = `<span><i style="background:var(--series-1)"></i>Approved (vendor usage)</span><span><i style="background:var(--series-2)"></i>Unapproved (detected access)</span>
+    <span class="muted" title="Hover a day for the unique count and the number on both. Unapproved counts come from SSO sign-ins (access) and card expenses (attributed to the cardholder's team by estimate); they show detection, not confirmed active use.">Employees can be on both, so don't add the lines (${last.any} unique, ${last.both} on both). Unapproved = detected, not confirmed use.</span>`;
+}
+
+// Chart 2: heatmap, team x tool, adoption %
+function renderC2({ me, from, to }) {
+  const rows = teamRows(me), approved = Object.keys(APPROVED), shadow = Object.keys(SHADOW);
+  const cols = [...approved.map(t => ({ t, g: 0 })), ...shadow.map(t => ({ t, g: 1 }))];
+  const W = 1100, L = 210, gap = 28, rh = 44, top = 56, H = top + rows.length * rh + 4;
+  const cw = (W - L - gap) / cols.length, cx = i => L + i * cw + (cols[i].g ? gap : 0);
+  const hdr = [[0, 'Approved', '--series-1'], [1, 'Unapproved (detected access)', '--series-2']].map(([g, name, v]) => {
+    const idx = cols.map((c, i) => c.g === g ? i : -1).filter(i => i >= 0), x0 = cx(idx[0]), x1 = cx(idx[idx.length - 1]) + cw - 4;
+    return `<rect x="${x0}" y="2" width="9" height="9" rx="2" fill="var(${v})"/><text class="strong" x="${x0 + 14}" y="11">${name}</text><line x1="${x0}" x2="${x1}" y1="20" y2="20" stroke="var(--grid)"/>`;
+  }).join('');
+  const heads = cols.map((c, i) => `<text class="strong" x="${cx(i) + (cw - 4) / 2}" y="42" text-anchor="middle" style="font-size:11px">${c.t}</text>`).join('');
+  const body = rows.map((r, ri) => {
+    const y = top + ri * rh, N = r.ids.length;
+    const cells = cols.map((c, ci) => {
+      const n = activeUsers(r.ids, c.t, from, to), asg = c.g ? 0 : r.ids.filter(id => isAssigned(id, c.t)).length, pct = n / N * 100;
+      const idle = asg > 0 && n === 0; // assigned, but Low detected use (under the 15% threshold)
+      const fill = n === 0 ? 'var(--track)' : `color-mix(in srgb, var(${c.g ? '--series-2' : '--series-1'}) ${8 + Math.round(pct * .77)}%, var(--surface-1))`;
+      const ti = T(`<b>${r.label}</b> · ${c.t}<br>${n} of ${plural(N, 'employee')} ${c.g ? 'detected' : 'in use'} (${pct.toFixed(0)}%)${c.g ? `<br>Not assigned (unapproved). ${EVIDENCE[TOOL_INFO[c.t].evidence].tip}` : `<br>${asg} assigned${idle ? '<br>Low detected use (under 15% of allocation; not the same as waste)' : ''}`}`);
+      return `<g onmousemove="showTip(event,tips[${ti}])" onmouseleave="hideTip()"><rect x="${cx(ci)}" y="${y}" width="${cw - 4}" height="${rh - 4}" rx="4" fill="${fill}" ${idle ? 'stroke="var(--text-muted)" stroke-dasharray="3 2"' : ''}/>
+        <text x="${cx(ci) + (cw - 4) / 2}" y="${y + 24}" text-anchor="middle" style="fill:${n === 0 && !idle ? 'var(--text-muted)' : pct > 62 ? '#fff' : 'var(--text-primary)'}">${n === 0 && !idle ? '–' : pct.toFixed(0) + '%'}</text></g>`;
+    }).join('');
+    return `<g class="${r.drill ? 'row-click' : ''}" ${r.drill ? `onclick="select('${r.id}')"` : ''}>
+      <rect class="rowbg" x="0" y="${y}" width="${L - 8}" height="${rh - 4}" fill="transparent"/>
+      <text class="strong" x="0" y="${y + 24}">${trunc(r.label, 28)}${r.drill ? ' ›' : ''}</text></g>${cells}`;
+  }).join('');
+  $('#c2').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Adoption by team and tool">${hdr}${heads}${body}</svg>`;
+  $('#c2legend').innerHTML = `<span class="muted">Darker = higher adoption · dashed outline = assigned, Low detected use (under 15% of allocation)</span>`;
+}
+
+// Chart 3: approved allocation vs. consumption, by billing model
+function renderC3({ ids, from, to, early, days }) {
+  const partial = state.period === 'nov', accr = to > 61 && to < 91; // November is still in progress
+  const rows = Object.keys(APPROVED).map(t => ({ t, m: metrics(ids, t, from, to) })).filter(r => r.m.assigned > 0 && r.m.util !== null);
+  $('#c3hint').innerHTML = `Utilization of each approved allocation. Guides mark 40% and 100%.${partial ? ' Percent compares use with the allocation to date; "left" is measured against the full month.' : ''}${state.period === 'all' ? ' The 3-month allocation counts Sep and Oct in full plus November pro-rated for 14 of 30 days.' : ''}${early ? ` <b>Early read:</b> ${days} of 30 days observed.` : ''}`;
+  if (!rows.length) { $('#c3').innerHTML = '<div class="none">No approved tools assigned in this scope.</div>'; $('#c3legend').innerHTML = ''; return; }
+  const W = 1100, L = 190, R = 340, rh = 44, hh = 30, topPad = 16, bw = W - L - R;
+  let yy = topPad; rows.forEach(r => { r.y = yy; yy += rh; });
+  const H = yy + 4, xmax = Math.max(120, ...rows.map(r => r.m.util * 1.05)), x = p => L + p / xmax * bw;
+  const guides = [40, 100].map(p => `<line x1="${x(p)}" x2="${x(p)}" y1="${topPad - 4}" y2="${H - 4}" stroke="var(--text-muted)" stroke-dasharray="4 3"/><text class="muted" x="${x(p)}" y="${topPad - 6}" text-anchor="middle">${p}%</text>`).join('');
+  const body = rows.map(r => {
+    const { t, m } = r, A = APPROVED[t], k = status(m.util), st = ST[k], y = r.y, pct = m.util.toFixed(0);
+    const label = stLabel(k, m.model) + (k === 'under' && early ? ' · early read' : '');
+    const used = rt(ids, t, from, to), alloc = Math.round(m.alloc), cost = rt(ids, t, from, to), unit = m.model === 'payg' ? 'spent' : 'used';
+    let l1, l2 = `${pct}% · ${label}`, detail;
+    if (m.model === 'license') {
+      l1 = `${m.active} of ${plural(m.countable, 'seat')} in use · ${money(cost)}${accr ? ' accrued' : ''}${m.reserved ? ` · ${m.reserved} reserved excl.` : ''}`;
+      detail = `Subscription cost ${money(cost)}${accr ? ' accrued for the days elapsed' : ''}, charged whether used or not.${m.reserved ? ` ${plural(m.reserved, 'reserved idle seat')} excluded from the percentage.` : ''}`;
+    } else if (m.remaining !== null) {
+      l1 = m.overMonthly ? `${money(used)} ${unit} · over the ${money(m.monthly)} month` : `${money(used)} ${unit} · ${money(m.remaining)} left of ${money(m.monthly)}${m.pool ? ' pool' : ''}`;
+      l2 = `${pct}%${partial ? ` of ${money(alloc)} to date` : ''} · ${label}`;
+      detail = `${money(used)} ${unit} against ${money(alloc)} allocated${partial ? ' to date (monthly amount pro-rated by days)' : ''}. Full monthly ${m.model === 'payg' ? 'budget' : 'allocation'} ${money(m.monthly)}.${m.pool ? ' Shared pool: "left" is for the whole pool; "used" covers the selected scope.' : ''}`;
+    } else {
+      l1 = `${money(used)} ${unit} of ${money(alloc)} ${m.model === 'payg' ? 'budget' : 'allocated'}`;
+      detail = 'Allocation covers all months in the period.';
+    }
+    const ti = T(`<b>${t}</b><br>${l1}<br>${l2}<br>${detail}${m.model !== 'license' && m.reserved ? ' Reserved seats stay in the dollar allocation (the credits remain committed).' : ''}${m.model === 'credits' ? ' ' + CREDIT_NOTE : ''} ${TOOL_INFO[t].ident === 'v' ? '✓ Verified' : '≈ Estimated (manual export, no vendor usage API)'}`);
+    return `<g onmousemove="showTip(event,tips[${ti}])" onmouseleave="hideTip()">
+      <rect x="0" y="${y}" width="${W}" height="${rh - 4}" fill="transparent"/>
+      <text class="strong" x="0" y="${y + 21}">${t}</text>
+      <rect x="${L}" y="${y + 10}" width="${x(100) - L}" height="12" rx="3" fill="var(--track)"/>
+      <rect x="${L}" y="${y + 10}" width="${Math.max(2, x(m.util) - L)}" height="12" rx="3" fill="var(--series-1)"/>
+      <text class="strong" x="${L + bw + 16}" y="${y + 16}">${l1}</text>
+      <text x="${L + bw + 16}" y="${y + 32}"><tspan fill="${st.color}">${st.icon}</tspan> ${l2}</text></g>`;
+  }).join('');
+  $('#c3').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Utilization of approved allocations by billing model">${guides}${body}</svg>`;
+  $('#c3legend').innerHTML = `<span><span style="color:${ST.over.color}">${ST.over.icon}</span> Over limit</span><span><span style="color:${ST.ok.color}">${ST.ok.icon}</span> On track</span><span><span style="color:${ST.under.color}">${ST.under.icon}</span> Underused / Below budget</span>${rows.some(r => r.m.model === 'credits') ? `<span class="muted">${CREDIT_NOTE}</span>` : ''}`;
+}
+
+// Tool inventory with 3-month history
+function renderTable({ ids, from, to, early }) {
+  const rows = ALL_TOOLS.filter(t => state.billing === 'All' || TOOL_INFO[t].billing === state.billing).map(t => {
+    const info = TOOL_INFO[t], tr = trend(ids, t, to);
+    const months = MONTHS.map(m => costFor(ids, t, m.start, m.start + m.elapsed));
+    if (info.approved) {
+      const m = metrics(ids, t, from, to); if (!m.assigned) return null;
+      const people = `${m.active} of ${m.assigned}${m.reserved ? `<br><span class="muted">${m.reserved} reserved, excluded</span>` : ''}`;
+      const action = m.util === null ? '–' : status(m.util) === 'under'
+        ? (m.model === 'license' ? 'Check low-use seats' : m.model === 'credits' ? 'Reallocate unused credits' : 'Review budget')
+        : status(m.util) === 'over' ? (m.model === 'payg' ? 'Raise budget or cap' : 'Top up or cap') : '–';
+      return { t, info, months, people, tr, status: m.util === null ? '–' : stHtml(m.util, early, m.model), action };
+    }
+    if (!months.some(v => v > 0)) return null;
+    const act = ids.filter(id => isActive(id, t, from, to)), adv = shadowAdvice(t, act.length, act.length / ids.length * 100, act);
+    return { t, info, months, people: `${act.length} detected`, tr, status: '–', action: act.length ? adv.short : 'No detection in this period' };
+  }).filter(Boolean);
+  $('#table').innerHTML = `<table class="inv"><thead>
+    <tr><th></th><th></th><th></th><th></th><th class="grp" colspan="3">Monthly spend</th><th></th><th></th><th></th></tr>
+    <tr><th>Tool</th><th>Billing model</th><th>Detected via</th><th class="n" title="Approved tools: people using at least 15% of their allocation. Unapproved tools: people detected (sign-in access or card-based attribution), not confirmed active use.">Active people</th>
+    ${MONTHS.map(m => `<th class="n" ${m.elapsed < m.len ? 'title="Month to date. License cost is accrued for the days elapsed; credits and pay-as-you-go are actual consumption; unapproved (≈) is estimated."' : ''}>${m.name}${m.elapsed < m.len ? ' (so far)' : ''}</th>`).join('')}<th class="n" title="Active people in the last 7 days vs. the 7 days ending 2 weeks earlier">7-day change</th><th>Status</th><th>Suggested action</th></tr></thead><tbody>` +
+    (rows.map(r => `<tr><td><span class="sw" style="background:var(${r.info.approved ? '--series-1' : '--series-2'})"></span><b>${r.t}</b><br><span class="muted">${r.info.approved ? 'Approved' : 'Unapproved'}</span></td>
+      <td>${r.info.approved ? `<span class="tag">${r.info.billing}</span>` : `${dq('u')}`}</td>
+      <td>${r.info.how}<br>${evPill(r.t)}</td><td class="n">${r.people}</td>
+      ${r.months.map(v => `<td class="n">${v ? (r.info.approved ? money(v) : '≈ ' + money(v)) : '–'}</td>`).join('')}
+      <td class="n">${r.tr ? `${r.tr.delta >= 0 ? '+' : ''}${r.tr.delta} <span class="muted">(${r.tr.before}→${r.tr.now})</span>` : '–'}</td>
+      <td>${r.status}</td><td>${r.action}</td></tr>`).join('') || '<tr><td colspan="10" class="none">No tools match this filter.</td></tr>') +
+    `</tbody></table>${rows.some(r => r.info.model === 'credits') ? `<div class="muted" style="margin-top:8px">${CREDIT_NOTE}</div>` : ''}`;
+}
+
+render();
+</script>
+</body>
+</html>
